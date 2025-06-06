@@ -607,7 +607,7 @@
       `;
     }
 
-    indicator.textContent = "✓ Real-time Extension Active";
+    indicator.textContent = "✓ Time Tracker Extension Active";
     indicator.title = "Zone01 Time Tracker is calculating and updating your hours in real-time";
 
     indicatorWrapper.appendChild(indicator);

@@ -2,6 +2,16 @@
 
 Une extension Chrome qui calcule et met à jour automatiquement vos heures de plateforme sur le système d'émargement Zone01.
 
+## 📸 Aperçu
+
+### Avant l'extension
+
+![Avant](screeshots/before.png)
+
+### Après l'extension
+
+![Après](screeshots/after.png)
+
 ## 🚀 Installation Rapide
 
 ### Méthode 1 : Cloner le Dépôt GitHub (Recommandée)
@@ -57,6 +67,16 @@ Consultez le fichier `INSTALLATION_GUIDE.md` pour un guide détaillé de résolu
 # Zone01 Time Tracker - Chrome Extension (English)
 
 A Chrome extension that automatically calculates and updates your platform hours in the Zone01 emargement system.
+
+## 📸 Preview
+
+### Before the extension
+
+![Before](screeshots/before.png)
+
+### After the extension
+
+![After](screeshots/after.png)
 
 ## 🚀 Quick Installation
 
