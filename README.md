@@ -4,20 +4,38 @@ Une extension Chrome qui calcule et met à jour automatiquement vos heures de pl
 
 ## 🚀 Installation Rapide
 
-### 1. Télécharger les Fichiers
+### Méthode 1 : Cloner le Dépôt GitHub (Recommandée)
+
+1. **Cloner le Dépôt**
+
+   - Ouvrez un terminal/invite de commande
+   - Exécutez la commande suivante :
+     ```bash
+     git clone https://github.com/Konixy/zone01-time-tracker.git
+     ```
+   - Cela créera un dossier `zone01-time-tracker` avec tous les fichiers
+
+2. **Installer dans Chrome**
+
+   - Ouvrez Chrome et allez sur `chrome://extensions/`
+   - Activez **"Mode développeur"** (coin supérieur droit)
+   - Cliquez sur **"Charger l'extension non empaquetée"**
+   - Sélectionnez le dossier `zone01-time-tracker` cloné
+   - L'extension est maintenant installée !
+
+3. **Mettre à Jour l'Extension**
+   - Quand une mise à jour est disponible, ouvrez un terminal dans le dossier de l'extension
+   - Exécutez : `git pull`
+   - Allez sur `chrome://extensions/`
+   - Cliquez sur l'icône de rechargement (🔄) à côté de l'extension Zone01 Time Tracker
+
+### Méthode 2 : Télécharger les Fichiers
 
 - Téléchargez le fichier `zone01-time-tracker.zip`
 - Extrayez le contenu dans un dossier sur votre ordinateur
+- Suivez les étapes d'installation dans Chrome de la Méthode 1 (étape 2)
 
-### 2. Installer dans Chrome
-
-1. Ouvrez Chrome et allez sur `chrome://extensions/`
-2. Activez **"Mode développeur"** (coin supérieur droit)
-3. Cliquez sur **"Charger l'extension non empaquetée"**
-4. Sélectionnez le dossier où vous avez extrait les fichiers
-5. L'extension est maintenant installée !
-
-### 3. Vérification
+### Vérification
 
 - Allez sur `https://hub.zone01normandie.org/emargement/user.php`
 - Vous devriez voir un badge vert **"✓ Extension Temps Réel Active"**
@@ -42,20 +60,38 @@ A Chrome extension that automatically calculates and updates your platform hours
 
 ## 🚀 Quick Installation
 
-### 1. Download Files
+### Method 1: Clone GitHub Repository (Recommended)
+
+1. **Clone the Repository**
+
+   - Open a terminal/command prompt
+   - Run the following command:
+     ```bash
+     git clone https://github.com/Konixy/zone01-time-tracker.git
+     ```
+   - This will create a `zone01-time-tracker` folder with all the files
+
+2. **Install in Chrome**
+
+   - Open Chrome and go to `chrome://extensions/`
+   - Enable **"Developer mode"** (top right corner)
+   - Click **"Load unpacked"**
+   - Select the cloned `zone01-time-tracker` folder
+   - The extension is now installed!
+
+3. **Update the Extension**
+   - When an update is available, open a terminal in the extension folder
+   - Run: `git pull`
+   - Go to `chrome://extensions/`
+   - Click the reload icon (🔄) next to the Zone01 Time Tracker extension
+
+### Method 2: Download Files
 
 - Download the `zone01-time-tracker.zip` file
 - Extract the contents to a folder on your computer
+- Follow the Chrome installation steps from Method 1 (step 2)
 
-### 2. Install in Chrome
-
-1. Open Chrome and go to `chrome://extensions/`
-2. Enable **"Developer mode"** (top right corner)
-3. Click **"Load unpacked"**
-4. Select the folder where you extracted the files
-5. The extension is now installed!
-
-### 3. Verification
+### Verification
 
 - Go to `https://hub.zone01normandie.org/emargement/user.php`
 - You should see a green badge **"✓ Real-time Extension Active"**
@@ -91,7 +127,21 @@ The extension analyzes the logs table and:
 
 ## Installation
 
-### Method 1: Load as Unpacked Extension (Development)
+### Method 1: Clone GitHub Repository (Recommended)
+
+1. Clone the repository to a local folder:
+   ```bash
+   git clone https://github.com/Konixy/zone01-time-tracker.git
+   ```
+2. Open Chrome and navigate to `chrome://extensions/`
+3. Enable "Developer mode" in the top right corner
+4. Click "Load unpacked" button
+5. Select the cloned `zone01-time-tracker` folder
+6. The extension should now be loaded and active
+
+**To update:** Run `git pull` in the extension folder, then reload the extension in `chrome://extensions/`
+
+### Method 2: Load as Unpacked Extension (Development)
 
 1. Download or clone this extension files to a local folder
 2. Open Chrome and navigate to `chrome://extensions/`
@@ -100,7 +150,7 @@ The extension analyzes the logs table and:
 5. Select the folder containing the extension files
 6. The extension should now be loaded and active
 
-### Method 2: Pack and Install (Production)
+### Method 3: Pack and Install (Production)
 
 1. In Chrome, go to `chrome://extensions/`
 2. Enable "Developer mode"
