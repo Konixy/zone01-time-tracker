@@ -1,25 +1,31 @@
-// Zone01 Time Tracker Content Script
+// Zone01 Time Tracker Content Script - Updated for New Layout
 (() => {
-  // Helper function to parse time string (HH:MM:SS) to total seconds
+  // Helper function to parse time string (HH:MM:SS or HH:MM) to total seconds
   function timeToSeconds(timeStr) {
-    if (!timeStr || timeStr.trim() === "") return 0;
+    if (!timeStr || timeStr.trim() === "" || timeStr.trim() === "-") return 0;
 
     const parts = timeStr.split(":");
-    if (parts.length !== 3) return 0;
+    if (parts.length < 2 || parts.length > 3) return 0;
 
     const hours = Number.parseInt(parts[0], 10) || 0;
     const minutes = Number.parseInt(parts[1], 10) || 0;
-    const seconds = Number.parseInt(parts[2], 10) || 0;
+    const seconds = parts.length === 3 ? Number.parseInt(parts[2], 10) || 0 : 0;
 
     return hours * 3600 + minutes * 60 + seconds;
   }
 
-  // Helper function to convert seconds back to HH:MM:SS format
-  function secondsToTime(totalSeconds) {
+  // Helper function to convert seconds back to HH:MM format (for calendar display)
+  function secondsToTimeShort(totalSeconds) {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+  }
+
+  // Helper function to convert seconds back to HH:MM:SS format (for logs display)
+  function secondsToTimeLong(totalSeconds) {
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
-
     return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
   }
 
@@ -52,48 +58,75 @@
     return today.getFullYear() === checkDate.getFullYear() && today.getMonth() === checkDate.getMonth() && today.getDate() === checkDate.getDate();
   }
 
-  // Enhanced function to find logs table with multiple fallback methods
+  // Helper function to convert date from YYYY-MM-DD to DD/MM format
+  function formatDateForCalendar(dateStr) {
+    const date = new Date(dateStr);
+    const day = date.getDate().toString().padStart(2, "0");
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    return `${day}/${month}`;
+  }
+
+  // Helper function to parse DD/MM format and return full date string
+  function parseCalendarDate(dayStr, year) {
+    const [day, month] = dayStr.split("/");
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+
+  // Helper function to mix two colors
+  function mixColors(color1, color2, ratio = 0.5) {
+    // Convert hex colors to RGB
+    const hexToRgb = (hex) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result
+        ? {
+            r: Number.parseInt(result[1], 16),
+            g: Number.parseInt(result[2], 16),
+            b: Number.parseInt(result[3], 16),
+          }
+        : { r: 0, g: 0, b: 0 };
+    };
+
+    // Extract RGB from computed style or hex
+    const parseColor = (color) => {
+      if (color.startsWith("#")) {
+        return hexToRgb(color);
+      }
+      if (color.startsWith("rgb")) {
+        const match = color.match(/\d+/g);
+        return match
+          ? {
+              r: Number.parseInt(match[0], 10),
+              g: Number.parseInt(match[1], 10),
+              b: Number.parseInt(match[2], 10),
+            }
+          : { r: 0, g: 0, b: 0 };
+      }
+      return { r: 0, g: 0, b: 0 }; // Default to black if can't parse
+    };
+
+    const rgb1 = parseColor(color1);
+    const rgb2 = parseColor(color2);
+
+    // Mix the colors
+    const r = Math.round(rgb1.r * (1 - ratio) + rgb2.r * ratio);
+    const g = Math.round(rgb1.g * (1 - ratio) + rgb2.g * ratio);
+    const b = Math.round(rgb1.b * (1 - ratio) + rgb2.b * ratio);
+
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  // Function to find logs table
   function findLogsTable() {
     console.log("Zone01 Time Tracker: Searching for logs table...");
 
-    // Method 1: Try by ID
+    // Try by ID first
     const logsTableBody = document.getElementById("tbodyLogs");
     if (logsTableBody) {
       console.log("Zone01 Time Tracker: Found logs table by ID");
       return logsTableBody;
     }
 
-    // Method 2: Try to find table with "Logs" text nearby
-    const tables = document.querySelectorAll("table");
-    for (const table of tables) {
-      const tbody = table.querySelector("tbody");
-      if (tbody) {
-        // Check if this table has the expected column structure
-        const headerRow = table.querySelector("thead tr");
-        if (headerRow) {
-          const headers = Array.from(headerRow.querySelectorAll("th")).map((th) => th.textContent.trim().toLowerCase());
-          if (headers.includes("date") && headers.includes("enter time")) {
-            console.log("Zone01 Time Tracker: Found logs table by header structure");
-            return tbody;
-          }
-        }
-      }
-    }
-
-    // Method 3: Look for table near "Logs" text
-    const logsText = Array.from(document.querySelectorAll("p")).find((p) => p.textContent.trim() === "Logs");
-    if (logsText) {
-      const nextTable = logsText.nextElementSibling;
-      if (nextTable && nextTable.tagName === "DIV") {
-        const tbody = nextTable.querySelector("tbody");
-        if (tbody) {
-          console.log("Zone01 Time Tracker: Found logs table after 'Logs' text");
-          return tbody;
-        }
-      }
-    }
-
-    // Method 4: Find table with logTable ID
+    // Fallback: Find table with logTable ID
     const logTable = document.getElementById("logTable");
     if (logTable) {
       const tbody = logTable.querySelector("tbody");
@@ -107,52 +140,46 @@
     return null;
   }
 
-  // Enhanced function to find stats table
-  function findStatsTable() {
-    console.log("Zone01 Time Tracker: Searching for stats table...");
+  // Function to find calendar table
+  function findCalendarTable() {
+    console.log("Zone01 Time Tracker: Searching for calendar table...");
 
-    // Method 1: Try by ID
-    const statsTableBody = document.getElementById("tbodyStats");
-    if (statsTableBody) {
-      console.log("Zone01 Time Tracker: Found stats table by ID");
-      return statsTableBody;
+    // Try by ID first
+    const calendarTableBody = document.getElementById("tbodyWeekCalendar");
+    if (calendarTableBody) {
+      console.log("Zone01 Time Tracker: Found calendar table by ID");
+      return calendarTableBody;
     }
 
-    // Method 2: Look for table with "Heures plateformes" header
-    const tables = document.querySelectorAll("table");
-    for (const table of tables) {
-      const headerRow = table.querySelector("thead tr");
-      if (headerRow) {
-        const headers = Array.from(headerRow.querySelectorAll("th")).map((th) => th.textContent.trim().toLowerCase());
-        if (headers.includes("heures plateformes")) {
-          const tbody = table.querySelector("tbody");
-          if (tbody) {
-            console.log("Zone01 Time Tracker: Found stats table by 'Heures plateformes' header");
-            return tbody;
-          }
-        }
+    // Fallback: Look for table with week calendar class
+    const calendarTable = document.querySelector(".table-week-calendar");
+    if (calendarTable) {
+      const tbody = calendarTable.querySelector("tbody");
+      if (tbody) {
+        console.log("Zone01 Time Tracker: Found calendar table by class");
+        return tbody;
       }
     }
 
-    console.log("Zone01 Time Tracker: Could not find stats table");
+    console.log("Zone01 Time Tracker: Could not find calendar table");
     return null;
   }
 
   // Function to check if tables have content
   function tablesHaveContent() {
     const logsTable = findLogsTable();
-    const statsTable = findStatsTable();
+    const calendarTable = findCalendarTable();
 
-    if (!logsTable || !statsTable) {
+    if (!logsTable || !calendarTable) {
       return false;
     }
 
     const logsRows = logsTable.querySelectorAll("tr");
-    const statsRows = statsTable.querySelectorAll("tr");
+    const calendarRows = calendarTable.querySelectorAll("tr");
 
-    console.log(`Zone01 Time Tracker: Found ${logsRows.length} log rows and ${statsRows.length} stats rows`);
+    console.log(`Zone01 Time Tracker: Found ${logsRows.length} log rows and ${calendarRows.length} calendar rows`);
 
-    return logsRows.length > 0 && statsRows.length > 0;
+    return logsRows.length > 0 && calendarRows.length > 0;
   }
 
   // Function to wait for tables to be populated
@@ -180,44 +207,59 @@
     checkTables();
   }
 
-  // Main function to calculate and update platform hours
-  function updatePlatformHours() {
+  // Function to find the current day cell in the calendar table
+  function findCurrentDayCell() {
+    const calendarTableBody = findCalendarTable();
+    if (!calendarTableBody) return null;
+
+    const today = new Date();
+    const todayStr = formatDateForCalendar(today.toISOString().split("T")[0]);
+
+    console.log(`Zone01 Time Tracker: Looking for today's cell: ${todayStr}`);
+
+    // Search through all rows and cells
+    const rows = calendarTableBody.querySelectorAll("tr");
+    for (const row of rows) {
+      const cells = row.querySelectorAll("td");
+      // Skip the first cell (week number) and last cell (total)
+      for (let i = 1; i < cells.length - 1; i++) {
+        const cell = cells[i];
+        const strongElement = cell.querySelector("strong");
+        if (strongElement) {
+          const cellDate = strongElement.textContent.trim();
+          if (cellDate === todayStr) {
+            console.log(`Zone01 Time Tracker: Found today's cell in column ${i}`);
+            return { cell, row, columnIndex: i };
+          }
+        }
+      }
+    }
+
+    console.log("Zone01 Time Tracker: Could not find today's cell in calendar");
+    return null;
+  }
+
+  // Main function to update time displays
+  function updateTimeDisplays() {
     try {
       console.log("Zone01 Time Tracker: Starting update...");
-      console.log("Zone01 Time Tracker: Current URL:", window.location.href);
-      console.log("Zone01 Time Tracker: Document ready state:", document.readyState);
 
       // Find the logs table body
       const logsTableBody = findLogsTable();
       if (!logsTableBody) {
         console.log("Zone01 Time Tracker: Logs table not found");
-        // List all tables for debugging
-        const allTables = document.querySelectorAll("table");
-        console.log(`Zone01 Time Tracker: Found ${allTables.length} tables on page`);
-        allTables.forEach((table, index) => {
-          const tbody = table.querySelector("tbody");
-          const rowCount = tbody ? tbody.querySelectorAll("tr").length : 0;
-          console.log(`Zone01 Time Tracker: Table ${index}: ${rowCount} rows`);
-        });
         return;
       }
 
-      // Find the stats table body
-      const statsTableBody = findStatsTable();
-      if (!statsTableBody) {
-        console.log("Zone01 Time Tracker: Stats table not found");
-        return;
-      }
-
-      let totalSeconds = 0;
-      let ongoingSessionSeconds = 0; // Track only ongoing sessions for total hours
+      let todayTotalSeconds = 0;
+      let liveTotalSeconds = 0;
       const rows = logsTableBody.querySelectorAll("tr");
 
       console.log(`Zone01 Time Tracker: Processing ${rows.length} log entries`);
 
+      // Process logs table - update live calculations and collect today's total
       rows.forEach((row, index) => {
         const cells = row.querySelectorAll("td");
-        console.log(`Zone01 Time Tracker: Row ${index}: ${cells.length} cells`);
 
         if (cells.length >= 4) {
           const date = cells[0].textContent.trim();
@@ -228,108 +270,231 @@
           console.log(`Zone01 Time Tracker: Row ${index}: Date=${date}, Enter=${enterTime}, Exit=${exitTime}, TimeIn=${timeIn}`);
 
           if (timeIn && timeIn !== "") {
-            // Use existing time in value for platform hours
+            // Use existing time in value
             const seconds = timeToSeconds(timeIn);
-            totalSeconds += seconds;
+            if (isToday(date)) {
+              todayTotalSeconds += seconds;
+            }
             console.log(`Zone01 Time Tracker: Added existing time: ${timeIn} (${seconds} seconds)`);
           } else if (enterTime && enterTime !== "" && !exitTime) {
-            // Calculate time from enter time to current time (only for ongoing sessions)
+            // Calculate live time for ongoing sessions
             if (isToday(date)) {
               const currentTime = getCurrentTime();
               const calculatedSeconds = calculateTimeDifference(enterTime, currentTime);
-              const calculatedTimeStr = secondsToTime(calculatedSeconds);
+              const calculatedTimeStr = secondsToTimeLong(calculatedSeconds);
 
               // Update the Time In cell for this row
               const timeInCell = cells[3];
               timeInCell.textContent = calculatedTimeStr;
               timeInCell.style.fontStyle = "italic";
-              timeInCell.style.color = "#4ade80"; // Bright green color for dark mode
+              timeInCell.style.color = "#4ade80"; // Bright green color
               timeInCell.title = "Live calculation - updates in real-time";
               timeInCell.setAttribute("data-live-calculation", "true");
               timeInCell.setAttribute("data-enter-time", enterTime);
               timeInCell.setAttribute("data-date", date);
 
-              totalSeconds += calculatedSeconds;
-              ongoingSessionSeconds += calculatedSeconds; // Track ongoing session time separately
+              todayTotalSeconds += calculatedSeconds;
+              liveTotalSeconds += calculatedSeconds;
               console.log(
                 `Zone01 Time Tracker: Calculated and updated time for today: ${enterTime} to ${currentTime} = ${calculatedTimeStr} (${calculatedSeconds} seconds)`
               );
-            } else {
-              console.log(`Zone01 Time Tracker: Skipping non-today entry without time in: ${date}`);
             }
           }
         }
       });
 
-      // Update the platform hours cell
-      const statsRow = statsTableBody.querySelector("tr");
-      if (statsRow) {
-        // First, ensure the remaining hours column exists
-        addRemainingHoursColumn();
+      // Update calendar table with today's total
+      updateCalendarTable(todayTotalSeconds, liveTotalSeconds);
 
-        const platformHoursCell = statsRow.querySelector("td:first-child");
-        const totalHoursCell = statsRow.querySelector("td:nth-child(2)");
-        const remainingHoursCell = statsRow.querySelector('td[data-tracker-column="remaining"]');
+      // Show persistent indicator that the extension is working
+      showPersistentIndicator();
+    } catch (error) {
+      console.error("Zone01 Time Tracker: Error updating time displays:", error);
+    }
+  }
 
-        if (platformHoursCell) {
-          const newTimeStr = secondsToTime(totalSeconds);
-          const oldValue = platformHoursCell.textContent.trim();
+  // Function to update calendar table
+  function updateCalendarTable(todayTotalSeconds, liveTotalSeconds) {
+    try {
+      const currentDayData = findCurrentDayCell();
+      if (!currentDayData) {
+        console.log("Zone01 Time Tracker: Could not find current day cell");
+        return;
+      }
 
-          platformHoursCell.textContent = newTimeStr;
-          // platformHoursCell.style.backgroundColor = "#e8f5e8";
-          platformHoursCell.style.fontWeight = "bold";
-          platformHoursCell.style.color = "#4ade80"; // Bright green color for dark mode
-          platformHoursCell.title = "Updated by Zone01 Time Tracker";
+      const { cell, row, columnIndex } = currentDayData;
 
-          console.log(`Zone01 Time Tracker: Updated platform hours from ${oldValue} to ${newTimeStr} (${totalSeconds} total seconds)`);
+      // Get existing time from the cell (if any)
+      let existingSeconds = 0;
+      const cellHTML = cell.innerHTML;
+      const lines = cellHTML.split("<br>");
 
-          // Update the total hours column by adding ongoing session time to original value
-          if (totalHoursCell) {
-            const originalTotalHours = totalHoursCell.textContent.trim();
-
-            // Store original value if not already stored
-            if (!totalHoursCell.getAttribute("data-original-total")) {
-              totalHoursCell.setAttribute("data-original-total", originalTotalHours);
-            }
-
-            const originalTotalSeconds = timeToSeconds(originalTotalHours);
-            const newTotalSeconds = originalTotalSeconds + ongoingSessionSeconds;
-            const newTotalTimeStr = secondsToTime(newTotalSeconds);
-
-            totalHoursCell.textContent = newTotalTimeStr;
-            totalHoursCell.style.fontWeight = "bold";
-            totalHoursCell.style.color = "#4ade80"; // Bright green color for dark mode
-            totalHoursCell.title = "Updated by Zone01 Time Tracker (original + ongoing sessions)";
-            console.log(
-              `Zone01 Time Tracker: Updated total hours from ${originalTotalHours} to ${newTotalTimeStr} (added ${secondsToTime(
-                ongoingSessionSeconds
-              )} ongoing time)`
-            );
+      if (lines.length > 1) {
+        const timeText = lines[1].trim();
+        if (timeText !== "-") {
+          // Parse existing time only if it's not already a live calculation
+          if (!cell.getAttribute("data-has-live-time")) {
+            const cleanTimeText = timeText.replace(/<[^>]*>/g, "").trim();
+            existingSeconds = timeToSeconds(cleanTimeText);
+          } else {
+            // Get stored existing seconds if this is already a live calculation
+            existingSeconds = Number.parseInt(cell.getAttribute("data-existing-seconds") || "0", 10);
           }
+        }
+      }
 
-          // Update the remaining hours column
-          if (remainingHoursCell) {
-            const remainingTimeStr = calculateRemainingHours(newTimeStr);
-            remainingHoursCell.textContent = remainingTimeStr;
-            remainingHoursCell.style.fontWeight = "bold";
-            remainingHoursCell.style.color = "#4ade80";
-            remainingHoursCell.title = "Updated by Zone01 Time Tracker";
-            console.log(`Zone01 Time Tracker: Updated remaining hours to ${remainingTimeStr}`);
-          }
+      // Calculate new total: existing time + live time
+      const newTotalSeconds = existingSeconds + liveTotalSeconds;
+      const newTimeStr = secondsToTimeShort(newTotalSeconds);
 
-          // Show persistent indicator that the extension is working
-          showPersistentIndicator();
+      // Update the cell content
+      const strongElement = cell.querySelector("strong");
+      if (strongElement) {
+        const dateStr = strongElement.textContent.trim();
 
-          // Show update frequency indicator
-          showUpdateFrequencyIndicator();
+        if (liveTotalSeconds > 0) {
+          // Show live time with green italic styling
+          cell.innerHTML = `<strong>${dateStr}</strong><br><span style="color: #4ade80; font-style: italic;" title="Live calculation - includes ongoing session time">${newTimeStr}</span>`;
+          cell.setAttribute("data-has-live-time", "true");
+          cell.setAttribute("data-existing-seconds", existingSeconds.toString());
+          cell.setAttribute("data-live-seconds", liveTotalSeconds.toString());
+        } else if (existingSeconds > 0) {
+          // Show only existing time
+          cell.innerHTML = `<strong>${dateStr}</strong><br>${secondsToTimeShort(existingSeconds)}`;
         } else {
-          console.log("Zone01 Time Tracker: Platform hours cell not found in stats table");
+          // No time data
+          cell.innerHTML = `<strong>${dateStr}</strong><br>-`;
+        }
+
+        console.log(`Zone01 Time Tracker: Updated today's cell with ${newTimeStr} (${existingSeconds}s existing + ${liveTotalSeconds}s live)`);
+      }
+
+      // Update weekly total
+      updateWeeklyTotal(row, columnIndex);
+    } catch (error) {
+      console.error("Zone01 Time Tracker: Error updating calendar table:", error);
+    }
+  }
+
+  // Function to update weekly total in the calendar
+  function updateWeeklyTotal(weekRow, updatedColumnIndex) {
+    try {
+      const cells = weekRow.querySelectorAll("td");
+      const totalCell = cells[cells.length - 1]; // Last cell is the total
+
+      if (!totalCell) return;
+
+      let weekTotalSeconds = 0;
+
+      // Sum up all days in the week (skip first cell which is week number, and last cell which is total)
+      for (let i = 1; i < cells.length - 1; i++) {
+        const dayCell = cells[i];
+        const cellHTML = dayCell.innerHTML;
+        const lines = cellHTML.split("<br>");
+
+        if (lines.length > 1) {
+          const timeText = lines[1].trim();
+          if (timeText !== "-") {
+            // Clean up the time text and parse it
+            const cleanTimeText = timeText.replace(/<[^>]*>/g, "").trim();
+            const daySeconds = timeToSeconds(cleanTimeText);
+            weekTotalSeconds += daySeconds;
+          }
+        }
+      }
+
+      // Get original total to preserve styling
+      const originalContent = totalCell.innerHTML;
+      let originalSeconds = 0;
+
+      // Try to extract original time from the total cell
+      if (!totalCell.getAttribute("data-original-total")) {
+        const strongElement = totalCell.querySelector("strong");
+        if (strongElement) {
+          const originalTimeStr = strongElement.textContent.trim();
+          originalSeconds = timeToSeconds(originalTimeStr);
+          totalCell.setAttribute("data-original-total", originalTimeStr);
         }
       } else {
-        console.log("Zone01 Time Tracker: Stats row not found");
+        originalSeconds = timeToSeconds(totalCell.getAttribute("data-original-total"));
+      }
+
+      // Update total with live calculation
+      const newTotalStr = secondsToTimeShort(weekTotalSeconds);
+
+      // Update with italic styling to indicate live updates (keeping original color)
+      totalCell.innerHTML = `<strong style="font-style: italic;" title="Updated by Zone01 Time Tracker - includes live calculations">${newTotalStr}</strong>`;
+
+      console.log(`Zone01 Time Tracker: Updated weekly total to ${newTotalStr} (${weekTotalSeconds} seconds)`);
+    } catch (error) {
+      console.error("Zone01 Time Tracker: Error updating weekly total:", error);
+    }
+  }
+
+  // Function to update only the live time calculations (more frequent updates)
+  function updateLiveCalculations() {
+    try {
+      const liveCells = document.querySelectorAll('[data-live-calculation="true"]');
+
+      if (liveCells.length === 0) {
+        return; // No live calculations to update
+      }
+
+      console.log(`Zone01 Time Tracker: Updating ${liveCells.length} live calculations`);
+
+      let totalLiveSeconds = 0;
+
+      for (const cell of liveCells) {
+        const enterTime = cell.getAttribute("data-enter-time");
+        const date = cell.getAttribute("data-date");
+
+        if (enterTime && date && isToday(date)) {
+          const currentTime = getCurrentTime();
+          const calculatedSeconds = calculateTimeDifference(enterTime, currentTime);
+          const calculatedTimeStr = secondsToTimeLong(calculatedSeconds);
+
+          // Update the cell if the value has changed
+          if (cell.textContent !== calculatedTimeStr) {
+            cell.textContent = calculatedTimeStr;
+          }
+
+          totalLiveSeconds += calculatedSeconds;
+        }
+      }
+
+      // Update calendar with new live calculations
+      updateCalendarLiveTime(totalLiveSeconds);
+    } catch (error) {
+      console.error("Zone01 Time Tracker: Error updating live calculations:", error);
+    }
+  }
+
+  // Function to update only the live portion of calendar calculations
+  function updateCalendarLiveTime(liveTotalSeconds) {
+    try {
+      const currentDayData = findCurrentDayCell();
+      if (!currentDayData) return;
+
+      const { cell, row } = currentDayData;
+
+      if (cell.getAttribute("data-has-live-time") === "true") {
+        const existingSeconds = Number.parseInt(cell.getAttribute("data-existing-seconds") || "0", 10);
+        const newTotalSeconds = existingSeconds + liveTotalSeconds;
+        const newTimeStr = secondsToTimeShort(newTotalSeconds);
+
+        // Update the cell
+        const strongElement = cell.querySelector("strong");
+        if (strongElement) {
+          const dateStr = strongElement.textContent.trim();
+          cell.innerHTML = `<strong>${dateStr}</strong><br><span style="color: #4ade80; font-style: italic;" title="Live calculation - includes ongoing session time">${newTimeStr}</span>`;
+          cell.setAttribute("data-live-seconds", liveTotalSeconds.toString());
+        }
+
+        // Update weekly total
+        updateWeeklyTotal(row);
       }
     } catch (error) {
-      console.error("Zone01 Time Tracker: Error updating platform hours:", error);
+      console.error("Zone01 Time Tracker: Error updating calendar live time:", error);
     }
   }
 
@@ -355,7 +520,7 @@
         console.log("Zone01 Time Tracker: DOM change detected, checking for tables...");
         setTimeout(() => {
           if (tablesHaveContent()) {
-            updatePlatformHours();
+            updateTimeDisplays();
           }
         }, 500);
       }
@@ -367,166 +532,6 @@
     });
 
     console.log("Zone01 Time Tracker: MutationObserver set up");
-  }
-
-  // Wait for page to be fully loaded and run the update
-  function init() {
-    console.log("Zone01 Time Tracker: Initializing...");
-
-    // Set up mutation observer to watch for dynamic content
-    setupMutationObserver();
-
-    function startWaiting() {
-      console.log("Zone01 Time Tracker: Starting to wait for tables...");
-      waitForTables(() => {
-        updatePlatformHours();
-        // Set up regular full updates every 60 seconds
-        setInterval(updatePlatformHours, 60000);
-        // Set up frequent live calculation updates every 10 seconds
-        setInterval(updateLiveCalculations, 10000);
-        console.log("Zone01 Time Tracker: Set up live calculation updates every 10 seconds");
-      });
-    }
-
-    if (document.readyState === "loading") {
-      console.log("Zone01 Time Tracker: Document still loading, waiting for DOMContentLoaded");
-      document.addEventListener("DOMContentLoaded", () => {
-        console.log("Zone01 Time Tracker: DOMContentLoaded fired");
-        setTimeout(startWaiting, 1000);
-      });
-    } else {
-      console.log("Zone01 Time Tracker: Document already loaded");
-      setTimeout(startWaiting, 1000);
-    }
-  }
-
-  // Initialize the extension
-  init();
-
-  console.log("Zone01 Time Tracker: Content script loaded and initialized");
-
-  // Function to update only the live time calculations (more frequent updates)
-  function updateLiveCalculations() {
-    try {
-      const liveCells = document.querySelectorAll('[data-live-calculation="true"]');
-
-      if (liveCells.length === 0) {
-        return; // No live calculations to update
-      }
-
-      console.log(`Zone01 Time Tracker: Updating ${liveCells.length} live calculations`);
-
-      for (const cell of liveCells) {
-        const enterTime = cell.getAttribute("data-enter-time");
-        const date = cell.getAttribute("data-date");
-
-        if (enterTime && date && isToday(date)) {
-          const currentTime = getCurrentTime();
-          const calculatedSeconds = calculateTimeDifference(enterTime, currentTime);
-          const calculatedTimeStr = secondsToTime(calculatedSeconds);
-
-          // Update the cell if the value has changed
-          if (cell.textContent !== calculatedTimeStr) {
-            cell.textContent = calculatedTimeStr;
-
-            // Add a subtle color flash animation to show the update
-            const originalColor = cell.style.color;
-            cell.style.transition = "color 0.3s ease";
-            cell.style.color = "#22d3ee"; // Bright cyan flash
-            setTimeout(() => {
-              cell.style.color = originalColor; // Back to original bright green
-            }, 300);
-          }
-        }
-      }
-
-      // Also update the platform hours when live calculations change
-      updatePlatformHoursOnly();
-    } catch (error) {
-      console.error("Zone01 Time Tracker: Error updating live calculations:", error);
-    }
-  }
-
-  // Function to update only the platform hours total (without full table re-scan)
-  function updatePlatformHoursOnly() {
-    try {
-      const statsTableBody = findStatsTable();
-      if (!statsTableBody) return;
-
-      const logsTableBody = findLogsTable();
-      if (!logsTableBody) return;
-
-      let totalSeconds = 0;
-      const rows = logsTableBody.querySelectorAll("tr");
-
-      for (const row of rows) {
-        const cells = row.querySelectorAll("td");
-        if (cells.length >= 4) {
-          const timeInCell = cells[3];
-          const timeIn = timeInCell.textContent.trim();
-
-          if (timeIn && timeIn !== "") {
-            const seconds = timeToSeconds(timeIn);
-            totalSeconds += seconds;
-          }
-        }
-      }
-
-      // Update the platform hours cell
-      const statsRow = statsTableBody.querySelector("tr");
-      if (statsRow) {
-        const platformHoursCell = statsRow.querySelector("td:first-child");
-        const totalHoursCell = statsRow.querySelector("td:nth-child(2)");
-        const remainingHoursCell = statsRow.querySelector('td[data-tracker-column="remaining"]');
-
-        if (platformHoursCell) {
-          const newTimeStr = secondsToTime(totalSeconds);
-          platformHoursCell.textContent = newTimeStr;
-          platformHoursCell.style.fontWeight = "bold";
-          platformHoursCell.style.color = "#4ade80"; // Bright green color for dark mode
-          platformHoursCell.title = "Updated by Zone01 Time Tracker";
-
-          // Calculate ongoing session time for total hours
-          if (totalHoursCell) {
-            // Get the original total hours value (we need to store it somewhere or recalculate)
-            // For now, we'll update total hours with the same logic as main function
-            const liveCells = document.querySelectorAll('[data-live-calculation="true"]');
-            let ongoingSeconds = 0;
-
-            for (const cell of liveCells) {
-              const timeValue = cell.textContent.trim();
-              if (timeValue) {
-                ongoingSeconds += timeToSeconds(timeValue);
-              }
-            }
-
-            // We need to get the original total hours somehow - let's use data attribute
-            const originalTotal = totalHoursCell.getAttribute("data-original-total");
-            if (originalTotal) {
-              const originalSeconds = timeToSeconds(originalTotal);
-              const newTotalSeconds = originalSeconds + ongoingSeconds;
-              const newTotalTimeStr = secondsToTime(newTotalSeconds);
-
-              totalHoursCell.textContent = newTotalTimeStr;
-              totalHoursCell.style.fontWeight = "bold";
-              totalHoursCell.style.color = "#4ade80";
-              totalHoursCell.title = "Updated by Zone01 Time Tracker (original + ongoing sessions)";
-            }
-          }
-
-          // Update the remaining hours column
-          if (remainingHoursCell) {
-            const remainingTimeStr = calculateRemainingHours(newTimeStr);
-            remainingHoursCell.textContent = remainingTimeStr;
-            remainingHoursCell.style.fontWeight = "bold";
-            remainingHoursCell.style.color = "#4ade80";
-            remainingHoursCell.title = "Updated by Zone01 Time Tracker";
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Zone01 Time Tracker: Error updating platform hours only:", error);
-    }
   }
 
   // Function to show persistent indicator that the extension is working
@@ -610,94 +615,6 @@
     indicator.textContent = "✓ Time Tracker Extension Active";
     indicator.title = "Zone01 Time Tracker is calculating and updating your hours in real-time";
 
-    indicatorWrapper.appendChild(indicator);
-    parent.appendChild(indicatorWrapper);
-    console.log("Zone01 Time Tracker: Persistent indicator created");
-  }
-
-  // Function to add "Remaining hours" column to the stats table
-  function addRemainingHoursColumn() {
-    try {
-      const statsTable = document.querySelector("#tbodyStats").closest("table");
-      if (!statsTable) {
-        console.log("Zone01 Time Tracker: Stats table not found for adding column");
-        return;
-      }
-
-      // Check if column already exists
-      if (statsTable.querySelector('th[data-tracker-column="remaining"]')) {
-        return; // Already added
-      }
-
-      // Add header cell
-      const headerRow = statsTable.querySelector("thead tr");
-      if (headerRow) {
-        const remainingHeader = document.createElement("th");
-        remainingHeader.textContent = "Remaining hours";
-        remainingHeader.setAttribute("data-tracker-column", "remaining");
-        remainingHeader.style.color = "#4ade80";
-        remainingHeader.style.fontWeight = "bold";
-        remainingHeader.title = "Hours remaining to reach 35 hours (calculated by Time Tracker)";
-
-        // Insert after "Total heures" column (3rd column)
-        const totalHoursHeader = headerRow.children[1]; // Second column is "Total heures"
-        if (totalHoursHeader?.nextSibling) {
-          headerRow.insertBefore(remainingHeader, totalHoursHeader.nextSibling);
-        } else {
-          headerRow.appendChild(remainingHeader);
-        }
-
-        console.log("Zone01 Time Tracker: Added 'Remaining hours' header");
-      }
-
-      // Add body cell
-      const bodyRow = statsTable.querySelector("tbody tr");
-      if (bodyRow) {
-        const remainingCell = document.createElement("td");
-        remainingCell.setAttribute("data-tracker-column", "remaining");
-        remainingCell.style.color = "#4ade80";
-        remainingCell.style.fontWeight = "bold";
-        remainingCell.title = "Updated by Zone01 Time Tracker";
-        remainingCell.textContent = "35:00:00"; // Default value
-
-        // Insert after "Total heures" column (3rd column)
-        const totalHoursCell = bodyRow.children[1]; // Second column is "Total heures"
-        if (totalHoursCell?.nextSibling) {
-          bodyRow.insertBefore(remainingCell, totalHoursCell.nextSibling);
-        } else {
-          bodyRow.appendChild(remainingCell);
-        }
-
-        console.log("Zone01 Time Tracker: Added 'Remaining hours' cell");
-      }
-    } catch (error) {
-      console.error("Zone01 Time Tracker: Error adding remaining hours column:", error);
-    }
-  }
-
-  // Function to calculate remaining hours (35:00:00 - total hours)
-  function calculateRemainingHours(totalTimeStr) {
-    const totalSeconds = timeToSeconds(totalTimeStr);
-    const targetSeconds = 35 * 3600; // 35 hours in seconds
-    const remainingSeconds = Math.max(0, targetSeconds - totalSeconds); // Don't go negative
-
-    return secondsToTime(remainingSeconds);
-  }
-
-  // Function to show update frequency indicator near the stats table
-  function showUpdateFrequencyIndicator() {
-    // Only create if it doesn't exist
-    if (document.getElementById("zone01-update-frequency")) {
-      return;
-    }
-
-    // Find the persistent indicator to position the frequency text under it
-    const persistentIndicator = document.getElementById("zone01-tracker-wrapper");
-    if (!persistentIndicator) {
-      console.log("Zone01 Time Tracker: Persistent indicator not found, cannot position frequency indicator");
-      return;
-    }
-
     // Create the frequency indicator
     const frequencyIndicator = document.createElement("div");
     frequencyIndicator.id = "zone01-update-frequency";
@@ -740,11 +657,84 @@
     frequencyIndicator.appendChild(animatedDot);
 
     const text = document.createElement("span");
-    text.textContent = "Updates every 10s";
+    text.textContent = "Live updating";
     frequencyIndicator.appendChild(text);
 
-    // Append directly to the wrapper container
-    persistentIndicator.appendChild(frequencyIndicator);
-    console.log("Zone01 Time Tracker: Update frequency indicator created inside wrapper");
+    indicatorWrapper.appendChild(indicator);
+    indicatorWrapper.appendChild(frequencyIndicator);
+    parent.appendChild(indicatorWrapper);
+    console.log("Zone01 Time Tracker: Persistent indicator created");
   }
+
+  // Function to set up Enter and Exit button click listeners
+  function setupButtonListeners() {
+    const enterButton = document.getElementById("student_enter");
+    const exitButton = document.getElementById("student_exit");
+
+    if (enterButton) {
+      enterButton.addEventListener("click", () => {
+        console.log("Zone01 Time Tracker: Enter button clicked, scheduling update...");
+        // Add delay to allow the site to update itself first
+        setTimeout(() => {
+          console.log("Zone01 Time Tracker: Updating after Enter button click");
+          updateTimeDisplays();
+        }, 2000); // 2 second delay to ensure site has time to update
+      });
+      console.log("Zone01 Time Tracker: Enter button listener set up");
+    } else {
+      console.log("Zone01 Time Tracker: Enter button not found");
+    }
+
+    if (exitButton) {
+      exitButton.addEventListener("click", () => {
+        console.log("Zone01 Time Tracker: Exit button clicked, scheduling update...");
+        // Add delay to allow the site to update itself first
+        setTimeout(() => {
+          console.log("Zone01 Time Tracker: Updating after Exit button click");
+          updateTimeDisplays();
+        }, 2000); // 2 second delay to ensure site has time to update
+      });
+      console.log("Zone01 Time Tracker: Exit button listener set up");
+    } else {
+      console.log("Zone01 Time Tracker: Exit button not found");
+    }
+  }
+
+  // Wait for page to be fully loaded and run the update
+  function init() {
+    console.log("Zone01 Time Tracker: Initializing...");
+
+    // Set up mutation observer to watch for dynamic content
+    setupMutationObserver();
+
+    function startWaiting() {
+      console.log("Zone01 Time Tracker: Starting to wait for tables...");
+      waitForTables(() => {
+        updateTimeDisplays();
+        // Set up Enter and Exit button click listeners after tables are found
+        setupButtonListeners();
+        // Set up regular full updates every 60 seconds
+        setInterval(updateTimeDisplays, 60000);
+        // Set up frequent live calculation updates every second
+        setInterval(updateLiveCalculations, 1000);
+        console.log("Zone01 Time Tracker: Set up live calculation updates every second");
+      });
+    }
+
+    if (document.readyState === "loading") {
+      console.log("Zone01 Time Tracker: Document still loading, waiting for DOMContentLoaded");
+      document.addEventListener("DOMContentLoaded", () => {
+        console.log("Zone01 Time Tracker: DOMContentLoaded fired");
+        setTimeout(startWaiting, 1000);
+      });
+    } else {
+      console.log("Zone01 Time Tracker: Document already loaded");
+      setTimeout(startWaiting, 1000);
+    }
+  }
+
+  // Initialize the extension
+  init();
+
+  console.log("Zone01 Time Tracker: Content script loaded and initialized");
 })();

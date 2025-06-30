@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Zone01 Time Tracker",
-  "version": "1.0",
+  "version": "2.0",
   "description": "Automatically calculates and updates platform hours in Zone01 emargement system",
   "permissions": ["activeTab"],
   "content_scripts": [
