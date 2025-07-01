@@ -165,6 +165,135 @@
     return null;
   }
 
+  // Function to add "Remaining" column to calendar table
+  function addRemainingHoursColumn() {
+    try {
+      const calendarTable = document.querySelector(".table-week-calendar");
+      if (!calendarTable) {
+        console.log("Zone01 Time Tracker: Calendar table not found for adding column");
+        return;
+      }
+
+      // Check if column already exists
+      if (calendarTable.querySelector('th[data-tracker-column="remaining"]')) {
+        return; // Already added
+      }
+
+      // Add header cell
+      const headerRow = calendarTable.querySelector("thead tr");
+      if (headerRow) {
+        const remainingHeader = document.createElement("th");
+        remainingHeader.textContent = "Reste";
+        remainingHeader.setAttribute("data-tracker-column", "remaining");
+        remainingHeader.style.color = "#4ade80";
+        remainingHeader.style.fontWeight = "bold";
+        remainingHeader.title = "Heures restantes pour atteindre 35h (calculé par Time Tracker)";
+
+        // Insert after "Total" column (last column)
+        headerRow.appendChild(remainingHeader);
+
+        console.log("Zone01 Time Tracker: Added 'Reste' header to calendar");
+      }
+
+      // Add body cells to all existing rows
+      const bodyRows = calendarTable.querySelectorAll("tbody tr");
+      for (const row of bodyRows) {
+        const remainingCell = document.createElement("td");
+        remainingCell.setAttribute("data-tracker-column", "remaining");
+        const defaultBackgroundColor = getRemainingHoursBackgroundColor("35:00");
+
+        // Apply styling with important flags to ensure visibility
+        const defaultTextColor = getRemainingHoursTextColor("35:00");
+        remainingCell.style.setProperty("color", defaultTextColor, "important");
+        remainingCell.style.setProperty("font-style", "italic", "important");
+        remainingCell.style.setProperty("font-weight", "bold", "important");
+        remainingCell.style.setProperty("text-align", "center", "important");
+        remainingCell.style.setProperty("background-color", defaultBackgroundColor, "important");
+        remainingCell.style.setProperty("padding", "4px", "important");
+        remainingCell.title = "Mis à jour par Zone01 Time Tracker";
+        remainingCell.innerHTML = "<strong>35:00</strong>"; // Default value
+
+        // Insert after "Total" column (last column)
+        row.appendChild(remainingCell);
+      }
+
+      console.log("Zone01 Time Tracker: Added 'Reste' cells to calendar rows");
+    } catch (error) {
+      console.error("Zone01 Time Tracker: Error adding remaining hours column:", error);
+    }
+  }
+
+  // Function to calculate remaining hours (35:00 - total hours)
+  function calculateRemainingHours(totalTimeStr) {
+    const totalSeconds = timeToSeconds(totalTimeStr);
+    const targetSeconds = 35 * 3600; // 35 hours in seconds
+    const remainingSeconds = Math.max(0, targetSeconds - totalSeconds); // Don't go negative
+
+    return secondsToTimeShort(remainingSeconds);
+  }
+
+  // Function to get background color based on remaining hours
+  function getRemainingHoursBackgroundColor(remainingTimeStr) {
+    const remainingSeconds = timeToSeconds(remainingTimeStr);
+    const remainingHours = remainingSeconds / 3600;
+
+    // Color scale based on remaining hours - strong visibility
+    if (remainingHours <= 0) {
+      // 0 or negative hours: Green (35h goal achieved!)
+      return "rgba(34, 197, 94, 0.7)"; // bg-green-500 with strong opacity
+    }
+    if (remainingHours <= 10) {
+      // 0-10 hours: Yellow (moderate progress)
+      return "rgba(250, 204, 21, 0.7)"; // bg-yellow-400 with strong opacity
+    }
+    if (remainingHours <= 20) {
+      // 10-20 hours: Orange (needs attention)
+      return "rgba(251, 146, 60, 0.7)"; // bg-orange-400 with strong opacity
+    }
+    // 20+ hours: Red (critical - needs lots of work)
+    return "rgba(248, 113, 113, 0.7)"; // bg-red-400 with strong opacity
+  }
+
+  // Function to get text color based on remaining hours with extra dark contrast
+  function getRemainingHoursTextColor(remainingTimeStr) {
+    const remainingSeconds = timeToSeconds(remainingTimeStr);
+    const remainingHours = remainingSeconds / 3600;
+
+    // Extra dark thematic colors for maximum contrast
+    if (remainingHours <= 0) {
+      // Extra dark green text for green background (35h achieved!)
+      return "#022c22"; // Even darker than green-950
+    }
+    if (remainingHours <= 10) {
+      // Extra dark brown text for yellow background
+      return "#1c0d00"; // Even darker than amber-950
+    }
+    if (remainingHours <= 20) {
+      // Extra dark orange text for orange background
+      return "#1a0600"; // Even darker than orange-950
+    }
+    // Extra dark red text for red background
+    return "#1a0404"; // Even darker than red-950
+  }
+
+  // Function to update all calendar rows with remaining hours
+  function updateAllCalendarRows() {
+    try {
+      const calendarTableBody = findCalendarTable();
+      if (!calendarTableBody) return;
+
+      const rows = calendarTableBody.querySelectorAll("tr");
+
+      for (const row of rows) {
+        updateWeeklyTotal(row);
+      }
+
+      console.log(`Zone01 Time Tracker: Updated remaining hours for ${rows.length} calendar rows`);
+    } catch (error) {
+      console.error("Zone01 Time Tracker: Error updating all calendar rows:", error);
+    }
+  }
+
   // Function to check if tables have content
   function tablesHaveContent() {
     const logsTable = findLogsTable();
@@ -303,6 +432,9 @@
         }
       });
 
+      // Add remaining hours column to calendar table
+      addRemainingHoursColumn();
+
       // Update calendar table with today's total
       updateCalendarTable(todayTotalSeconds, liveTotalSeconds);
 
@@ -369,25 +501,47 @@
         console.log(`Zone01 Time Tracker: Updated today's cell with ${newTimeStr} (${existingSeconds}s existing + ${liveTotalSeconds}s live)`);
       }
 
-      // Update weekly total
-      updateWeeklyTotal(row, columnIndex);
+      // Update all weekly totals
+      updateAllCalendarRows();
     } catch (error) {
       console.error("Zone01 Time Tracker: Error updating calendar table:", error);
     }
   }
 
   // Function to update weekly total in the calendar
-  function updateWeeklyTotal(weekRow, updatedColumnIndex) {
+  function updateWeeklyTotal(weekRow) {
     try {
       const cells = weekRow.querySelectorAll("td");
-      const totalCell = cells[cells.length - 1]; // Last cell is the total
+
+      // Find total cell (second to last cell now that we have remaining column)
+      let totalCell = null;
+      let remainingCell = null;
+
+      // Look for cells by data attribute to be more reliable
+      for (const cell of cells) {
+        if (cell.getAttribute("data-tracker-column") === "remaining") {
+          remainingCell = cell;
+          // Total cell should be the one before remaining
+          const cellIndex = Array.from(cells).indexOf(cell);
+          if (cellIndex > 0) {
+            totalCell = cells[cellIndex - 1];
+          }
+          break;
+        }
+      }
+
+      // Fallback: if no remaining column found yet, total is last cell
+      if (!totalCell) {
+        totalCell = cells[cells.length - 1];
+      }
 
       if (!totalCell) return;
 
       let weekTotalSeconds = 0;
 
-      // Sum up all days in the week (skip first cell which is week number, and last cell which is total)
-      for (let i = 1; i < cells.length - 1; i++) {
+      // Sum up all days in the week (skip first cell which is week number, and skip total/remaining cells)
+      const endIndex = remainingCell ? cells.length - 2 : cells.length - 1;
+      for (let i = 1; i < endIndex; i++) {
         const dayCell = cells[i];
         const cellHTML = dayCell.innerHTML;
         const lines = cellHTML.split("<br>");
@@ -424,6 +578,25 @@
 
       // Update with italic styling to indicate live updates (keeping original color)
       totalCell.innerHTML = `<strong style="font-style: italic;" title="Updated by Zone01 Time Tracker - includes live calculations">${newTotalStr}</strong>`;
+
+      // Update remaining hours column if it exists
+      if (remainingCell) {
+        const remainingTimeStr = calculateRemainingHours(newTotalStr);
+        const backgroundColor = getRemainingHoursBackgroundColor(remainingTimeStr);
+
+        // Apply styling with important flags to override site CSS
+        const textColor = getRemainingHoursTextColor(remainingTimeStr);
+
+        remainingCell.style.setProperty("background-color", backgroundColor, "important");
+        remainingCell.style.setProperty("color", textColor, "important");
+        remainingCell.style.setProperty("font-style", "italic", "important");
+        remainingCell.style.setProperty("font-weight", "bold", "important");
+        remainingCell.style.setProperty("padding", "4px", "important");
+
+        remainingCell.innerHTML = `<strong title="Heures restantes pour atteindre 35h">${remainingTimeStr}</strong>`;
+        console.log(`Zone01 Time Tracker: Updated remaining hours to ${remainingTimeStr} with background ${backgroundColor}`);
+        console.log("Zone01 Time Tracker: Cell computed background:", window.getComputedStyle(remainingCell).backgroundColor);
+      }
 
       console.log(`Zone01 Time Tracker: Updated weekly total to ${newTotalStr} (${weekTotalSeconds} seconds)`);
     } catch (error) {
@@ -490,8 +663,8 @@
           cell.setAttribute("data-live-seconds", liveTotalSeconds.toString());
         }
 
-        // Update weekly total
-        updateWeeklyTotal(row);
+        // Update all weekly totals (not just this row)
+        updateAllCalendarRows();
       }
     } catch (error) {
       console.error("Zone01 Time Tracker: Error updating calendar live time:", error);
